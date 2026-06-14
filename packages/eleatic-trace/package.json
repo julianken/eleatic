@@ -1,0 +1,73 @@
+{
+  "name": "@eleatic/trace",
+  "version": "0.1.0",
+  "description": "OpenTelemetry-native LLM tracing SDK for the eleatic family: wrap any LLM client (Anthropic/OpenAI/Gemini) to capture token usage, cost, and latency as GenAI-semconv spans, plus manual traced() spans — emits the @eleatic/eval trace shape and exports OTLP to any backend.",
+  "type": "module",
+  "license": "MIT",
+  "author": "Julian Kennon",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/julianken/eleatic.git",
+    "directory": "packages/eleatic-trace"
+  },
+  "homepage": "https://github.com/julianken/eleatic/tree/main/packages/eleatic-trace#readme",
+  "bugs": {
+    "url": "https://github.com/julianken/eleatic/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "opentelemetry",
+    "otel",
+    "tracing",
+    "llm",
+    "llm-observability",
+    "gen-ai",
+    "genai",
+    "cost",
+    "tokens",
+    "eval",
+    "anthropic",
+    "openai",
+    "gemini"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit -p tsconfig.test.json",
+    "test": "tsc --noEmit -p tsconfig.test.json && vitest run",
+    "example": "tsx examples/trace-a-workflow.ts",
+    "prepare": "npm run build"
+  },
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/core": "^2.8.0",
+    "@opentelemetry/context-async-hooks": "^2.8.0",
+    "@opentelemetry/sdk-trace-base": "^2.8.0",
+    "@opentelemetry/semantic-conventions": "^1.41.1"
+  },
+  "devDependencies": {
+    "@eleatic/eval": "*",
+    "@types/node": "^24.13.2",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.8"
+  }
+}
