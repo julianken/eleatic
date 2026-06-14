@@ -7,7 +7,7 @@
  *
  * Smoke-tested in CI so it can't rot.
  */
-import { openStore } from 'eleatic';
+import { openStore } from '@eleatic/eval';
 
 const DB = 'example.sqlite';
 const store = openStore(DB);

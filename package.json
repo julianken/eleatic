@@ -1,73 +1,20 @@
 {
-  "name": "eleatic",
-  "version": "0.1.0",
-  "description": "Domain-agnostic, local-first eval-results explorer: cross-run comparison, per-row diff, judgment drill-down, faceted filter/sort, metric trends, human adjudication, plus a trace tree + span inspector — over a tiny SQLite store with a framework-free web UI.",
-  "type": "module",
+  "name": "eleatic-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The eleatic family — a local-first eval / LLM-observability toolkit. Packages live under packages/.",
   "license": "MIT",
   "author": "Julian Kennon",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/julianken/eleatic.git"
-  },
-  "homepage": "https://github.com/julianken/eleatic#readme",
-  "bugs": {
-    "url": "https://github.com/julianken/eleatic/issues"
-  },
-  "keywords": [
-    "eval",
-    "llm-eval",
-    "evaluation",
-    "llm",
-    "trace",
-    "tracing",
-    "observability",
-    "sqlite",
-    "explorer",
-    "local-first",
-    "adjudication"
+  "type": "module",
+  "workspaces": [
+    "packages/*"
   ],
   "engines": {
     "node": ">=20"
   },
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
-    },
-    "./package.json": "./package.json"
-  },
-  "bin": {
-    "eleatic": "dist/cli.js"
-  },
-  "files": [
-    "dist",
-    "ui/*.js",
-    "ui/*.html",
-    "ui/*.css",
-    "README.md",
-    "LICENSE"
-  ],
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run",
-    "example": "tsx examples/record-and-serve.ts",
-    "prepare": "npm run build"
-  },
-  "dependencies": {
-    "better-sqlite3": "^11.8.1",
-    "commander": "^13.1.0",
-    "express": "^5.2.1"
-  },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.12",
-    "@types/express": "^5.0.6",
-    "@types/node": "^24.13.2",
-    "@types/supertest": "^6.0.3",
-    "supertest": "^7.2.2",
-    "tsx": "^4.22.4",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.8"
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "example": "npm run example -w @eleatic/eval"
   }
 }

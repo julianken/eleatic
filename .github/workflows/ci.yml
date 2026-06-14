@@ -19,4 +19,4 @@ jobs:
       - run: npm test
       # Smoke the runnable example so it can't rot: it must write the store and exit 0.
       - run: npm run example
-      - run: test -f example.sqlite
+      - run: test -f packages/eleatic-eval/example.sqlite
