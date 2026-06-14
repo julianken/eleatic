@@ -4,19 +4,19 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Zero-coupling guard: eleatic must contain NO `@bird-watch/*` import and no
+ * Zero-coupling guard: eleatic carries NO `@bird-watch/*` import and no
  * `../../`-escaping relative import anywhere under {src,ui}, and its
- * package.json must declare NO `@bird-watch/*` dependency. That one-way
- * boundary (tools/photo-curation -> eleatic, never the reverse, and no monorepo
- * imports) is what lets the package `git mv` cleanly to its own repo later.
+ * package.json declares NO `@bird-watch/*` dependency. This boundary is what let
+ * the package extract cleanly out of its original monorepo into this standalone
+ * repo, and it keeps the package self-contained going forward (any consumer
+ * depends on eleatic, never the reverse).
  *
- * E9 (#1152) extends the original E1 guard to also assert the package.json
- * dependency surface (manifest coupling, not just source-level imports) and
- * pins the recursive scan to `readdirSync` (the `recursive` option needs
- * Node >= 18.17/20 — satisfied by the repo `engines.node` >= 20). The single
- * `extends "../../tsconfig.base.json"` line is the only sanctioned file-system
- * coupling and lives in tsconfig.json (a JSON config, not scanned here); the
- * README's abstraction-readiness checklist tracks inlining it on extraction.
+ * It asserts both source-level imports (scanned under {src,ui}) and the
+ * package.json dependency surface (manifest coupling). The recursive scan uses
+ * `readdirSync` (the `recursive` option needs Node >= 18.17/20 — satisfied by
+ * `engines.node` >= 20). The tsconfig is self-contained — the former
+ * `extends "../../tsconfig.base.json"` was inlined at extraction — so there is
+ * no remaining cross-package file-system coupling.
  */
 
 const PKG_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');

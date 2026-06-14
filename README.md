@@ -1,154 +1,101 @@
-# `eleatic`
+# eleatic
 
-A domain-agnostic, local eval-results explorer: cross-run comparison, per-row
-diff, judgment drill-down, faceted filter/sort, metric trends, and human
-adjudication — over a generic three-table SQLite store, with no knowledge of any
-particular eval domain.
+A domain-agnostic, local-first **eval-results explorer**: compare runs, diff rows, drill into individual judgments, filter and sort by any facet, watch metric trends, adjudicate by hand, and walk a full **trace tree + span inspector** — all over a single SQLite file with a framework-free web UI.
 
-It has two halves: a tiny TypeScript write/read library (`openStore` +
-`makeReader`) that any eval runner records into, and a framework-free browser
-explorer served by the `eleatic serve` bin. The first consumer is bird-maps'
-photo-judge eval (`tools/photo-curation`), but the package depends on nothing in
-this monorepo — that one-way boundary (`tools/photo-curation` → `eleatic`, never
-the reverse) is enforced by `src/no-coupling.test.ts` and is what lets the
-package `git mv` to its own repo later. See **Abstraction-readiness checklist**.
+![The eleatic trace explorer: a span tree on the left, a per-span inspector on the right.](docs/hero.png)
 
-Runtime dependencies: `better-sqlite3`, `express`, `commander`. No
-`@bird-watch/*` dependency in any group (guard-enforced).
+## Why it's built this way
 
-## Usage
+- **Local-first, single file.** Everything lives in one SQLite database. `eleatic serve --db eval.sqlite`, open a browser — no service to deploy, no account, no cloud.
+- **Domain-agnostic.** `output`, `expected`, `scores`, `metadata`, and `trace` are opaque JSON; eleatic never knows *what* you're evaluating. Your domain vocabulary stays in your data and is surfaced by a generic facet engine.
+- **Framework-free UI, zero build.** The explorer is vanilla ES modules served as static files — no bundler, no framework, no build step for the front end.
+- **Tiny dependency surface.** `better-sqlite3` + `express` + `commander`. That's the whole runtime.
+- **Trace as an opaque blob.** Hand it a `{ spans: [...] }` tree from any producer and get a clickable span tree with per-span tokens/cost/latency, a per-trace rollup, and a keyboard-navigable inspector.
 
-Record an eval run from any runner, then explore it:
+## Quick start
+
+```sh
+npm install eleatic
+```
 
 ```ts
-import { openStore } from '@bird-watch/eleatic';
+import { openStore } from 'eleatic';
 
-const store = openStore('eval.sqlite'); // ':memory:' default in tests
+const store = openStore('eval.sqlite');
 
-// 1. Write the run header before any row (eval_row FKs eval_run).
-store.recordRun({ id: runId, label, baseline, config, startedAt });
+store.recordRun({ id: 'run-1', label: 'gpt-4o vs claude', startedAt: new Date().toISOString() });
 
-// 2. One row per evaluated item — output/expected/scores/metadata are JSON-or-NULL.
-for (const item of items) {
-  store.recordRow({ runId, rowKey, label, imageUrl, contentHash, output, expected, scores, metadata });
-}
+store.recordRow({
+  runId: 'run-1',
+  rowKey: 'item-1',
+  output: { keep: true, qualityScore: 90 },
+  expected: { keep: true, qualityScore: 88 },
+  scores: { agreement: 1, scoreMae: 0.02 },
+  metadata: { verdict: 'agree' },
+  trace: {
+    spans: [
+      { id: 'judge', parentId: null, name: 'judge', kind: 'llm',
+        input: { prompt: 'Rate this answer…' },
+        output: { parsed: { keep: true, qualityScore: 90 } },
+        metrics: { promptTokens: 880, completionTokens: 190, costUsd: 0.0002, durationMs: 1502 } },
+    ],
+  },
+});
 
-// 3. Patch the run's aggregates once they're computed (the runner computes them late).
-store.finalizeRun(runId, { rowCount, metrics });
+store.finalizeRun('run-1', { rowCount: 1, metrics: { agreement: 1 } });
 store.close();
 ```
 
-```sh
-# Boot the explorer over a store (defaults: --port 8788).
-npx eleatic serve --db eval.sqlite --port 8788
-# Optional: --config <path> to an eleatic config JSON (metric registry, gates).
-```
-
-Human adjudication (`store.recordAdjudication({ rowKey, verdict, … })`) upserts a
-verdict keyed on the item; the explorer round-trips it through the UI.
-
-## Build / test
+Then explore it:
 
 ```sh
-npm run build --workspace @bird-watch/eleatic   # tsc → dist/, then copies ui/ → dist/ui/
-npm run test  --workspace @bird-watch/eleatic   # vitest (incl. the zero-coupling guard)
+npx eleatic serve --db eval.sqlite
+# → http://localhost:8788
 ```
 
-`tsc` only emits from `rootDir: src`; the `build` script appends a portable
-`cpSync('ui','dist/ui')` so `eleatic serve` can serve the explorer's static
-assets from the published package (`build-output.test.ts` asserts the copy ran).
+A runnable version is in [`examples/record-and-serve.ts`](examples/record-and-serve.ts).
 
-## Abstraction-readiness checklist
+## What you get
 
-`eleatic` is built to leave the monorepo whole. When the extraction is triggered
-(a Julian-initiated `git mv packages/eleatic → its own repo`), this is the
-cold-start brief — **not executed now**:
+- **Hub** — every run in a union-of-metrics table with inline trend sparklines; select two to compare.
+- **Diff** — per-`rowKey` divergence between two runs.
+- **Facets** — filter and sort rows by any `scores.*` / `metadata.*` path (`?f=metadata.verdict:eq:disagree`), as a gallery or a table.
+- **Drill-down** — a per-row drawer: output vs expected (pretty-printed), score bars, and the trace.
+- **Trace explorer** — `/trace` renders the `{ spans }` blob as a parent/child span tree with per-span metrics and a per-trace rollup; click any span for its input/output/metrics. Fully keyboard-navigable (WAI-ARIA tree).
+- **Adjudication** — record a human verdict per item; it's staleness-flagged when the underlying output changes.
 
-1. **Inline the tsconfig base.** `tsconfig.json` is the only sanctioned
-   file-system coupling: it `extends "../../tsconfig.base.json"`. Replace that
-   line with the resolved `compilerOptions` inline:
+## Three ways in
 
-   ```jsonc
-   {
-     "compilerOptions": {
-       "target": "ES2022",
-       "module": "ES2022",
-       "moduleResolution": "Bundler",
-       "esModuleInterop": true,
-       "skipLibCheck": true,
-       "strict": true,
-       "noUncheckedIndexedAccess": true,
-       "exactOptionalPropertyTypes": true,
-       "noImplicitOverride": true,
-       "declaration": true,
-       "declarationMap": true,
-       "sourceMap": true,
-       "resolveJsonModule": true,
-       "lib": ["ES2022"],
-       "rootDir": "src",
-       "outDir": "dist"
-     },
-     "include": ["src/**/*.ts"],
-     "exclude": ["src/**/*.test.ts"]
-   }
-   ```
+All documented by the shipped TypeScript declarations (`dist/*.d.ts`), so an editor — or a coding agent reading `node_modules/eleatic` — gets the contract, not bare signatures:
 
-   (`rootDir`/`outDir` already live in the local `compilerOptions`; the rest are
-   the inherited base, copied verbatim.)
-2. **Rename the package.** `@bird-watch/eleatic` → the published name; drop
-   `"private": true` and set a real `version`.
-3. **Repoint the consumer.** `tools/photo-curation/package.json` depends on
-   `"@bird-watch/eleatic": "*"` (workspace glob). Change it to the
-   versioned/published dep (`"eleatic": "^x.y.z"` under its new name), and update
-   the imports in `tools/photo-curation/src/eval/eleatic-adapter.ts`.
-4. **Drop the monorepo knip entry.** Remove the `'packages/eleatic'` block from
-   the root `knip.ts` (the `ui/*.js` runtime-resolved-specifier ignores travel
-   into the new repo's own knip config).
-5. **The guard travels with the package.** `src/no-coupling.test.ts` is
-   self-contained (pure `node:fs`, scans `{src,ui}` + `package.json`) — it ships
-   unchanged and keeps the one-way boundary honest in the new repo too.
+- **Library** — `openStore` / `makeReader` (typed read + write), plus a pure analysis module (`auc`, `calibratedThreshold`, `ambiguityBand`, `hybridRouting`, …) over a generic `AnalysisRow`, importable without booting the server.
+- **CLI** — `eleatic serve --db <file> [--port N] [--config <json>]`.
+- **HTTP read API** — `GET /api/runs`, `/api/diff`, `/api/rows?f=<path:op:value>`, `/api/row`, `/api/trends`, `/api/adjudications` (the UI is just a client of these).
 
-## End-to-end verification
+## The store
 
-A run-once recipe that exercises the whole eleatic surface against a real
-photo-judge eval. Needs a prod `DATABASE_URL` (read-only suffices), a
-`GEMINI_API_KEY`, and a thumbnail cache — run by a maintainer, not in CI. Env
-var names match `tools/photo-curation/scripts/run-eval-local.ts` and
-`analyze-experiment.ts`; reconcile against those scripts if a knob moves.
+Three tables in one SQLite file — the stable contract any producer writes to:
 
-```sh
-# 1. Build the package and assert the explorer's static assets were copied.
-npm ci
-npm run build -w @bird-watch/eleatic
-test -f packages/eleatic/dist/ui/index.html   # build copied ui/ → dist/ui/
+| Table | Holds |
+|---|---|
+| `eval_run` | one row per run: id, label, baseline, config, started-at, row-count, aggregate metrics |
+| `eval_row` | one row per evaluated item: `output` / `expected` / `scores` / `metadata` / `trace` (all opaque JSON), keyed by `(run_id, row_key)` |
+| `eval_adjudication` | one human verdict per item, keyed on `row_key`, staleness-anchored to a content hash |
 
-# 2. Run a photo-judge eval that writes the eleatic store (eval.sqlite).
-#    REVIEW_DB  — the local review.sqlite (dataset source: photo_current/photo_score)
-#    THUMB_DIR  — the local thumbnail cache the judge reads images from
-#    DATABASE_URL — prod, read-only (the frozen Opus baseline)
-#    GEMINI_API_KEY — the judge under test
-#    EVAL_DB    — the eleatic store this run writes (the analyzer reads it back)
-#    --first N  — optional smoke cap (e.g. --first 5) for a fast pass
-REVIEW_DB=tools/photo-curation/review.sqlite \
-THUMB_DIR=tools/photo-curation/thumbs \
-EVAL_DB=tools/photo-curation/eval.sqlite \
-DATABASE_URL=postgres://… \
-GEMINI_API_KEY=… \
-npm run eval -w @bird-watch/photo-curation -- --first 5
-#    → prints `eval run <run-id> (<n> rows) written to tools/photo-curation/eval.sqlite`
+## Tech stack
 
-# 3. Open the explorer over that store and walk every surface.
-npx eleatic serve --db tools/photo-curation/eval.sqlite --port 8788
-#    In the browser at http://localhost:8788 verify, with zero console errors:
-#      • the hub lists the run(s) with their metrics
-#      • a cross-run diff (pick two runs, inspect the per-row diff)
-#      • a facet gallery (filter/sort by a facet, e.g. keep-disagreements)
-#      • a per-row judgment drill-down (output vs expected, criteria, tokens/cost)
-#      • a human-adjudication round-trip (record a verdict, reload, confirm it persisted)
+| Layer | Choice |
+|---|---|
+| Store | SQLite via `better-sqlite3` |
+| Server | `express` |
+| CLI | `commander` |
+| UI | framework-free ES modules (no build step) |
+| Tests | `vitest` + `supertest` |
 
-# 4. Re-derive the dataset-level diagnostics from the same eleatic store.
-#    EVAL_DB points the analyzer at the store step 2 wrote (defaults ./eval.sqlite);
-#    the run-id is the first positional, `--band lo:hi` optional (default 40:70).
-EVAL_DB=tools/photo-curation/eval.sqlite \
-npm run analyze -w @bird-watch/photo-curation -- <run-id>
-```
+## History
+
+eleatic was extracted from a photo-judge evaluation harness, where it replaced a hosted eval backend with a 100%-local store + explorer. Its capabilities — run comparison, row diff, drill-down, faceting, trends, adjudication, trace inspection — are the table stakes the eval / LLM-observability category converged on (W&B Weave, Langfuse, MLflow, Arize Phoenix, Comet, Braintrust); eleatic is the focused, local-first, embeddable take.
+
+## License
+
+MIT

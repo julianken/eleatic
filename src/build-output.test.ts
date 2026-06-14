@@ -1,33 +1,34 @@
 import { describe, it, expect } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Build-output contract: `tsc` compiles src/ -> dist/ but does NOT copy ui/
- * (it only emits from rootDir). The package `build` script therefore appends a
- * portable `cpSync('ui','dist/ui',...)` so `eleatic serve` (E4) can serve static
- * assets from the published package. This test asserts that copy ran.
- *
- * It is deliberately gated on dist/ presence: dist/ is gitignored and does not
- * exist on a fresh checkout, so the CI `test` job (which runs before `build`)
- * would otherwise flake. When dist/ exists (post-build, locally or in the build
- * job), the copied marker MUST be there — proving tsc-alone did not silence the
- * copy step. When dist/ is absent the test documents the contract and no-ops.
+ * Packaged-UI contract. `eleatic serve` resolves its static UI directory as
+ * `../../ui` from dist/server/app.js — i.e. the package-root `ui/` directory
+ * (tsc emits only from rootDir; there is no copy step). For an INSTALLED package
+ * to serve a real UI instead of a blank page, two things must hold:
+ *   1. ui/index.html exists at the package root (the directory the server serves), and
+ *   2. package.json `files` ships `ui` (so it lands in node_modules on install).
+ * This is the invariant that, if violated, still passes `npm pack --dry-run` and
+ * a local `npx .` run but serves 404s to a real consumer — so it is asserted here.
  */
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
-const DIST = join(dirname(fileURLToPath(import.meta.url)), '..', 'dist');
+describe('packaged UI', () => {
+  it('serves the UI from the package-root ui/ directory', () => {
+    expect(existsSync(join(ROOT, 'ui', 'index.html'))).toBe(true);
+    expect(existsSync(join(ROOT, 'ui', 'trace.html'))).toBe(true);
+  });
 
-describe('build output', () => {
-  it('copies ui/ -> dist/ui/ during build (tsc alone would not)', () => {
-    if (!existsSync(DIST)) {
-      // Pre-build (e.g. the CI `test` job): nothing to assert yet.
-      return;
-    }
-    // ui/ currently holds only .gitkeep (real assets land in E5/E6). Either the
-    // placeholder or a future index.html proves the copy step ran.
-    const copied =
-      existsSync(join(DIST, 'ui', '.gitkeep')) || existsSync(join(DIST, 'ui', 'index.html'));
-    expect(copied).toBe(true);
+  it('ships ui/ and dist/ in the npm tarball (package.json files)', () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as { files?: string[] };
+    expect(Array.isArray(pkg.files)).toBe(true);
+    expect(pkg.files).toContain('dist');
+    // The served UI assets must ship — but the co-located ui/*.test.ts must NOT,
+    // so files lists ui asset globs (ui/*.js|html|css), never the bare `ui` dir.
+    expect(pkg.files!.some((f) => f.startsWith('ui/') && f.endsWith('.js'))).toBe(true);
+    expect(pkg.files!.some((f) => f.startsWith('ui/') && f.endsWith('.html'))).toBe(true);
+    expect(pkg.files).not.toContain('ui');
   });
 });
